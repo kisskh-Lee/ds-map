@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>드래곤소드 마스터 맵스 - 10종 마커</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        body, html { margin: 0; padding: 0; height: 100%; background: #f0f2f5; font-family: 'Segoe UI', sans-serif; overflow: hidden; }
+        #map { width: 100%; height: 100vh; background: #1a1a1a; }
+        
+        /* 상단 메뉴바 - 10개 항목을 위해 높이 자동 조절 */
+        .top-nav { 
+            position: fixed; top: 0; left: 0; width: 100%; 
+            background: rgba(255, 255, 255, 0.98); z-index: 2000; 
+            box-shadow: 0 2px 10px rgba(0,0,0,0.15); 
+            transition: transform 0.3s; transform: translateY(-100%); 
+        }
+        .top-nav.open { transform: translateY(0); }
+        .nav-content { 
+            display: flex; flex-direction: column; align-items: center; 
+            padding: 15px 20px; max-width: 1200px; margin: 0 auto; gap: 15px; 
+        }
+
+        /* 메뉴 열기 버튼 - 우측 상단 */
+        .menu-toggle { 
+            position: fixed; top: 12px; right: 20px; 
+            z-index: 2100; background: #222; color: #fff; border: 1px solid #444; 
+            padding: 8px 16px; border-radius: 8px; cursor: pointer; 
+            font-weight: 700; font-size: 13px; box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+        }
+
+        /* 필터 그룹 정렬 */
+        .filter-group { 
+            display: grid; 
+            grid-template-columns: repeat(5, 1fr); /* 5개씩 한 줄 */
+            gap: 10px 20px; 
+            width: 100%;
+        }
+        .filter-item { display: flex; align-items: center; gap: 8px; font-weight: 700; cursor: pointer; font-size: 13px; white-space: nowrap; }
+        /* 메뉴창 아이콘 크기 */
+	.filter-icon { 
+    		width: 20px; 
+    		height: 20px; 
+    		object-fit: contain; 
+		}
+
+	/* 🟢 여기에 추가: 지도 위 마커와 메뉴 아이콘에 그림자 넣기 */
+	.leaflet-marker-icon, .filter-icon {
+   		 filter: 
+        		/* 상하좌우로 흰색 그림자를 0.5px씩 줘서 테두리처럼 보이게 함 */
+        		drop-shadow(0.5px 0 0 white) 
+        		drop-shadow(-0.5px 0 0 white) 
+        		drop-shadow(0 0.5px 0 white) 
+        		drop-shadow(0 -0.5px 0 white)
+    			/* 가로0, 세로1px, 번짐2px, 검정색 투명도 70% */
+    			drop-shadow(0px 1px 2px rgba(0, 0, 0, 0.7));
+	}
+
+        .btn-group { display: flex; gap: 10px; }
+        button.action-btn { cursor: pointer; padding: 7px 14px; border-radius: 5px; font-size: 12px; font-weight: 700; border: none; color: #fff !important; }
+        .btn-export { background: #27ae60 !important; }
+        .btn-import { background: #2980b9 !important; }
+        .btn-clear { background: #c0392b !important; }
+        .delete-btn { background: #ff4757; color: white; border: none; padding: 5px 8px; border-radius: 3px; cursor: pointer; float: right; margin-top: 8px; font-size: 11px; }
+    </style>
+</head>
+<body>
+
+<button class="menu-toggle" onclick="toggleNav()" id="toggleBtn">메뉴 열기 ▽</button>
+
+<div class="top-nav" id="topNav">
+    <div class="nav-content">
+        <div class="filter-group" id="filterGroup"></div>
+        <div class="btn-group">
+            <button class="action-btn btn-export" onclick="exportToFile()">저장</button>
+            <button class="action-btn btn-import" onclick="document.getElementById('importFile').click()">로드</button>
+            <input type="file" id="importFile" style="display:none" onchange="importFromFile(this)">
+            <button class="action-btn btn-clear" onclick="clearAllMarkers()">초기화</button>
+        </div>
+    </div>
+</div>
+
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+    const imgW = 6000; 
+    const imgH = 6000; 
+
+    const map = L.map('map', { crs: L.CRS.Simple, minZoom: -4, maxZoom: 3, zoomSnap: 0.1, preferCanvas: false });
+    const halfW = imgW / 2; const halfH = imgH / 2;
+    const bounds = [[-halfH, -halfW], [halfH, halfW]];
+    L.imageOverlay('map.png', bounds).addTo(map);
+    map.fitBounds(bounds);
+    map.setView([0, 0], -1);
+
+    // 🖼️ 10종 마커 설정 (IMAGE 폴더 내 파일명 매칭)
+    const types = {
+        "1": { name: "상자", icon: "box.png" },
+        "2": { name: "퍼즐", icon: "puzzle.png" },
+        "3": { name: "재료", icon: "item.png" },
+        "4": { name: "이벤트", icon: "event.png" },
+        "5": { name: "동굴 입구", icon: "etc.png" },
+        "6": { name: "유령", icon: "ghost.png" },
+        "7": { name: "유령 목적지", icon: "ghost_end.png" },
+        "8": { name: "월드 보스", icon: "boss.png" },
+        "9": { name: "돌발 퀘스트", icon: "quest.png" },
+        "10": { name: "미지", icon: "unknown.png" } // 10번 자리를 위한 예비
+    };
+
+    const filterContainer = document.getElementById('filterGroup');
+    Object.keys(types).sort((a,b) => a-b).forEach(k => {
+        const t = types[k];
+        filterContainer.innerHTML += `
+            <label class="filter-item">
+                <input type="checkbox" checked onchange="filterMarkers('${t.name}', this.checked)"> 
+                <img src="IMAGE/${t.icon}" class="filter-icon" onerror="this.style.opacity='0'"> 
+                <span>${k}. ${t.name}</span>
+            </label>`;
+    });
+
+    function createImgIcon(iconName) {
+        return L.icon({
+            iconUrl: `IMAGE/${iconName}`,
+            iconSize: [20, 20],
+            iconAnchor: [10, 10],
+            popupAnchor: [0, -10]
+        });
+    }
+
+    let savedMarkers = JSON.parse(localStorage.getItem('ds_markers_center')) || [];
+    const markerLayers = {}; 
+    let visibleTypes = {};
+    Object.values(types).forEach(t => visibleTypes[t.name] = true);
+
+    function toggleNav() {
+        const nav = document.getElementById('topNav');
+        const btn = document.getElementById('toggleBtn');
+        nav.classList.toggle('open');
+        btn.innerHTML = nav.classList.contains('open') ? "닫기 △" : "메뉴 열기 ▽";
+    }
+
+    function drawMarker(data) {
+        const typeInfo = Object.values(types).find(t => t.name === data.type) || types["5"];
+        const marker = L.marker([data.lat, data.lng], { icon: createImgIcon(typeInfo.icon) });
+        markerLayers[data.id] = marker; 
+        if (visibleTypes[data.type]) marker.addTo(map);
+        marker.bindPopup(`<div style="min-width: 100px;"><b>[${data.type}]</b><br>${data.note || ''}<br><button class="delete-btn" onclick="deleteMarker(${data.id})">삭제</button></div>`);
+    }
+
+    window.filterMarkers = function(typeName, isVisible) {
+        visibleTypes[typeName] = isVisible;
+        savedMarkers.forEach(m => {
+            if (m.type === typeName) {
+                if (isVisible) markerLayers[m.id].addTo(map);
+                else map.removeLayer(markerLayers[m.id]);
+            }
+        });
+    };
+
+    savedMarkers.forEach(drawMarker);
+
+    map.on('click', function(e) {
+        const {lat, lng} = e.latlng;
+        if (lat < -halfH || lat > halfH || lng < -halfW || lng > halfW) return;
+        
+        let msg = "마커 종류 선택 (번호 입력):\n";
+        Object.keys(types).sort((a,b)=>a-b).forEach(k => {
+            msg += `${k}:${types[k].name}  `;
+            if(k == "5") msg += "\n"; // 줄바꿈 표시
+        });
+        
+        const choice = prompt(msg, "1");
+        if (!choice || !types[choice]) return;
+        
+        const t = types[choice];
+        const note = prompt(`${t.name} 메모:`, "");
+        const newM = { id: Date.now(), lat, lng, type: t.name, note: note || "" };
+        savedMarkers.push(newM);
+        localStorage.setItem('ds_markers_center', JSON.stringify(savedMarkers));
+        drawMarker(newM);
+    });
+
+    window.deleteMarker = function(id) {
+        if(confirm("삭제?")){ map.removeLayer(markerLayers[id]); savedMarkers = savedMarkers.filter(m => m.id !== id); localStorage.setItem('ds_markers_center', JSON.stringify(savedMarkers)); }
+    };
+
+    function clearAllMarkers() {
+        if(confirm("초기화?")){ savedMarkers.forEach(m => map.removeLayer(markerLayers[m.id])); savedMarkers = []; localStorage.setItem('ds_markers_center', JSON.stringify(savedMarkers)); }
+    }
+
+    function exportToFile() {
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(savedMarkers));
+        const dl = document.createElement('a'); dl.setAttribute("href", dataStr); dl.setAttribute("download", "ds_backup.json"); dl.click();
+    }
+
+    function importFromFile(input) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            savedMarkers = JSON.parse(e.target.result);
+            localStorage.setItem('ds_markers_center', JSON.stringify(savedMarkers));
+            location.reload();
+        };
+        reader.readAsText(input.files[0]);
+    }
+</script>
+</body>
+</html>
