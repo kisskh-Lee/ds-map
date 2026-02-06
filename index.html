@@ -56,10 +56,17 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
     const imgW = 6000; const imgH = 6000; 
-    const map = L.map('map', { crs: L.CRS.Simple, minZoom: -4, maxZoom: 3, zoomSnap: 0.1 });
+    const map = L.map('map', { 
+        crs: L.CRS.Simple,
+        minZoom: -4,
+        maxZoom: 3,
+        zoomSnap: 0.1
+        preferCanvas: true, // 🟢 마커가 많아도 랙을 줄여주는 마법의 한 줄!
+        wheelDebounceTime: 150 // 🟢 휠 줌 속도를 조절해서 랙 감소
+    });
     const halfW = imgW / 2; const halfH = imgH / 2;
     const bounds = [[-halfH, -halfW], [halfH, halfW]];
-    L.imageOverlay('map.png', bounds).addTo(map);
+    L.imageOverlay('map.webp', bounds).addTo(map);
     map.fitBounds(bounds);
     map.setView([0, 0], -1);
 
@@ -163,3 +170,4 @@
 </script>
 </body>
 </html>
+
