@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>드래곤소드 마스터 맵스 (Cloud Sync)</title>
+    <title>드래곤소드 마스터 맵스 (v2.2)</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
@@ -11,6 +11,7 @@
         body, html { margin: 0; padding: 0; height: 100%; background: #1a1a1a; font-family: 'Segoe UI', sans-serif; overflow: hidden; }
         #map { width: 100%; height: 100vh; background: #000000; }
         
+        /* 사이드바 스타일 */
         .side-nav { 
             position: fixed; top: 0; left: 0; width: 280px; height: 100%; 
             background: rgba(25, 25, 25, 0.98); color: #eee; z-index: 2000; 
@@ -31,19 +32,22 @@
             font-size: 20px; font-weight: bold; display: flex; align-items: center; justify-content: center;
         }
 
+        /* 모달 팝업 스타일 */
         #markerModal {
             display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
             background: rgba(30, 30, 30, 0.98); padding: 25px; border-radius: 12px;
             box-shadow: 0 10px 40px rgba(0,0,0,1); z-index: 3000;
             border: 2px solid #ffce00; width: 320px; color: white;
         }
-        .modal-help { font-size: 11px; color: #bbb; margin-bottom: 15px; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 6px; max-height: 120px; overflow-y: auto; }
+        .modal-help { font-size: 11px; color: #bbb; margin-bottom: 15px; background: rgba(0,0,0,0.4); padding: 12px; border-radius: 6px; max-height: 180px; overflow-y: auto; line-height: 1.5; border: 1px solid #333; }
+        
         #markerModal input, #markerModal select {
             width: 100%; padding: 10px; background: #111; border: 1px solid #444;
             color: white; border-radius: 5px; box-sizing: border-box; outline: none; margin-bottom: 12px;
         }
         #markerModal label { font-size: 12px; color: #ffce00; font-weight: bold; display: block; margin-bottom: 4px; }
 
+        /* 탐사도 스타일 */
         .region-section { margin-top: 10px; padding: 10px; background: rgba(255,255,255,0.05); border-radius: 6px; }
         .region-card { margin-bottom: 12px; border-bottom: 1px solid #333; padding-bottom: 8px; }
         .region-name { font-size: 13px; font-weight: bold; color: #ffce00; display: flex; justify-content: space-between; }
@@ -51,6 +55,7 @@
         .prog-bar-fill { background: #ffce00; height: 100%; width: 0%; transition: width 0.4s; }
         .prog-text { font-size: 11px; color: #aaa; }
 
+        /* 필터 스타일 */
         .category-container { margin-bottom: 5px; border-radius: 4px; background: rgba(255,255,255,0.03); }
         .category-header { padding: 10px 12px; background: #333; font-weight: bold; color: #ffce00; font-size: 14px; cursor: pointer; display: flex; justify-content: space-between; }
         .category-items { padding: 12px 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px 5px; }
@@ -61,7 +66,6 @@
         .btn-group { display: flex; flex-direction: column; gap: 8px; margin-top: auto; padding: 15px 0; }
         .action-btn { cursor: pointer; padding: 10px; border-radius: 5px; font-size: 13px; font-weight: 700; border: none; color: #fff !important; width: 100%; }
 
-        /* 로딩 레이어 */
         #loadingOverlay {
             display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0,0,0,0.8); z-index: 9999; color: #ffce00;
@@ -93,7 +97,7 @@
             <input type="file" id="importFile" style="display:none" onchange="importFromFile(this)">
             <button class="action-btn" style="background:#c62828" onclick="clearAllMarkers()">🗑️ 전체 초기화</button>
         </div>
-        <div style="padding: 10px; font-size: 10px; color: #666; text-align: center;">Cloud Sync Active</div>
+        <div style="padding: 10px; font-size: 10px; color: #666; text-align: center;">Cloud Sync v2.2</div>
     </div>
 </div>
 
@@ -101,7 +105,7 @@
     <h3 style="text-align:center; color:#ffce00; margin-top:0;">새 마커 등록</h3>
     <div class="modal-help" id="modalHelpText"></div>
     
-    <label>1. 번호 선택</label>
+    <label>1. 번호 입력</label>
     <input type="number" id="inputNum" placeholder="번호 입력 (1~16)" onkeydown="if(event.key==='Enter') document.getElementById('inputNote').focus()">
     
     <label>2. 메모</label>
@@ -135,29 +139,46 @@
     // ★★★ 중요: 본인의 구글 웹 앱 URL을 여기에 붙여넣으세요 ★★★
     const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwLRNMwZkLQg23uBYxViQSFkaymc0z0cJHMhIio_H6J7GTx6nqviihDt1sn3JWYr1I/exec";
 
+    // 지역별 목표치 (상자 목표는 1+2번 통합, 미니게임은 3번)
     const regionGoals = {
-        "오르비스 왕성": { "상자": 94, "퍼즐": 6 },
-        "시작의 초원": { "상자": 90, "퍼즐": 4 },
-        "풍요의 대지": { "상자": 156, "퍼즐": 6 },
-        "그림자 삼림": { "상자": 105, "퍼즐": 8 },
-        "산들바람 언덕": { "상자": 96, "퍼즐": 8 },
-        "강철심장 요새": { "상자": 115, "퍼즐": 6 },
-        "용오름 분지": { "상자": 159, "퍼즐": 5 },
-        "안개장막 고지대": { "상자": 111, "퍼즐": 7 },
-        "하늘마루 구릉지": { "상자": 105, "퍼즐": 7 }
+        "오르비스 왕성": { "상자": 94, "미니게임": 6 },
+        "시작의 초원": { "상자": 90, "미니게임": 4 },
+        "풍요의 대지": { "상자": 156, "미니게임": 6 },
+        "그림자 삼림": { "상자": 105, "미니게임": 8 },
+        "산들바람 언덕": { "상자": 96, "미니게임": 8 },
+        "강철심장 요새": { "상자": 115, "미니게임": 6 },
+        "용오름 분지": { "상자": 159, "미니게임": 5 },
+        "안개장막 고지대": { "상자": 111, "미니게임": 7 },
+        "하늘마루 구릉지": { "상자": 105, "미니게임": 7 }
     };
 
     const types = {
-        "1": { name: "상자", icon: "box.png" }, "2": { name: "퍼즐", icon: "puzzle.png" },
-        "3": { name: "월드 보스", icon: "boss.png" }, "4": { name: "돌발 퀘스트", icon: "quest.png" },
-        "5": { name: "유령", icon: "ghost.png" }, "6": { name: "유령 목적지", icon: "ghost_end.png" },
-        "7": { name: "이벤트", icon: "event.png" }, "8": { name: "새알", icon: "egg.png" },
-        "9": { name: "기억", icon: "item9.png" }, "10": { name: "추억", icon: "item10.png" },
-        "11": { name: "회상", icon: "item11.png" }, "12": { name: "망각", icon: "item12.png" },
-        "13": { name: "생기", icon: "item13.png" }, "14": { name: "순수", icon: "item14.png" },
-        "15": { name: "태고", icon: "item15.png" }, "16": { name: "활력", icon: "item16.png" }
+        "1": { name: "상자", icon: "box.png" }, 
+        "2": { name: "퍼즐", icon: "puzzle.png" },
+        "3": { name: "미니게임", icon: "minigame.png" }, 
+        "4": { name: "돌발 퀘스트", icon: "quest.png" },
+        "5": { name: "유령", icon: "ghost.png" }, 
+        "6": { name: "유령 목적지", icon: "ghost_end.png" },
+        "7": { name: "이벤트", icon: "event.png" }, 
+        "8": { name: "새알", icon: "egg.png" },
+        "9": { name: "기억", icon: "item9.png" }, 
+        "10": { name: "추억", icon: "item10.png" },
+        "11": { name: "회상", icon: "item11.png" }, 
+        "12": { name: "망각", icon: "item12.png" },
+        "13": { name: "생기", icon: "item13.png" }, 
+        "14": { name: "순수", icon: "item14.png" },
+        "15": { name: "태고", icon: "item15.png" }, 
+        "16": { name: "활력", icon: "item16.png" }
     };
 
+    const categoryData = [
+        { name: "보물", types: ["1", "2", "3"] }, 
+        { name: "몬스터", types: ["4"] },        
+        { name: "일상", types: ["5", "6", "7", "8"] }, 
+        { name: "재료", types: ["9", "10", "11", "12", "13", "14", "15", "16"] }
+    ];
+
+    // 지도 엔진 초기화
     const map = L.map('map', { 
         crs: L.CRS.Simple, minZoom: -4, maxZoom: 3, zoomSnap: 0.1, zoomControl: false,
         zoomAnimation: false, markerZoomAnimation: false, fadeAnimation: false
@@ -171,13 +192,7 @@
     const clusters = L.markerClusterGroup({ maxClusterRadius: 50, disableClusteringAtZoom: 1, animate: false });
     map.addLayer(clusters);
 
-    const categoryData = [
-        { name: "보물", types: ["1", "2"] },
-        { name: "몬스터", types: ["3", "4"] },
-        { name: "일상", types: ["5", "6", "7", "8"] }, 
-        { name: "재료", types: ["9", "10", "11", "12", "13", "14", "15", "16"] }
-    ];
-
+    // 사이드바 카테고리 생성
     const root = document.getElementById('categoryRoot');
     categoryData.forEach((cat, idx) => {
         let itemsHtml = '';
@@ -193,20 +208,18 @@
     let visibleTypes = {};
     Object.values(types).forEach(t => visibleTypes[t.name] = true);
 
-    // [핵심 기능] 클라우드 로딩
+    // 클라우드 동기화 로직
     async function syncFromCloud() {
         showLoading(true);
         try {
             const res = await fetch(SCRIPT_URL);
             const data = await res.json();
             savedMarkers = data;
-            // 맵 초기화 후 다시 그리기
             clusters.clearLayers();
             savedMarkers.forEach(drawMarker);
             updateRegionProgress();
             localStorage.setItem('ds_markers_v2', JSON.stringify(savedMarkers));
         } catch (e) {
-            console.warn("Cloud load failed, using local data.");
             savedMarkers = JSON.parse(localStorage.getItem('ds_markers_v2')) || [];
             savedMarkers.forEach(drawMarker);
             updateRegionProgress();
@@ -227,15 +240,21 @@
         document.getElementById('toggleBtn').innerHTML = nav.classList.contains('open') ? "✕" : "☰";
     }
 
+    // 마커 등록 안내 메시지 (가독성 개선 버전)
     map.on('contextmenu', e => {
         const modal = document.getElementById('markerModal');
         const help = document.getElementById('modalHelpText');
-        let helpMsg = "";
-        categoryData.forEach(c => {
-            helpMsg += `<b>[${c.name}]</b> `;
-            c.types.forEach(tid => helpMsg += `${tid}:${types[tid].name} `);
-            helpMsg += "<br>";
-        });
+        
+        let helpMsg = "<b style='color:#ffce00;'>[주요 마커]</b><br>";
+        helpMsg += "<div style='display:grid; grid-template-columns: 1fr 1fr; gap:2px; margin-top:5px;'>";
+        helpMsg += "<span>1:상자</span> <span>2:퍼즐</span>";
+        helpMsg += "<span>3:미니게임</span> <span>4:돌발퀘</span>";
+        helpMsg += "<span>5:유령</span> <span>6:유령도착</span>";
+        helpMsg += "<span>7:이벤트</span> <span>8:새알</span>";
+        helpMsg += "</div>";
+        helpMsg += "<hr style='border:0; border-top:1px dashed #555; margin:8px 0;'>";
+        helpMsg += "<b style='color:#ffce00;'>[재료]</b> 9:기억, 10:추억, 11:회상, 12:망각, 13:생기, 14:순수, 15:태고, 16:활력";
+        
         help.innerHTML = helpMsg;
         modal.style.display = 'block';
         window.tempLatLng = e.latlng;
@@ -251,15 +270,11 @@
         const num = document.getElementById('inputNum').value;
         const note = document.getElementById('inputNote').value;
         const region = document.getElementById('inputRegion').value;
-
         if (!types[num]) return alert("번호를 확인해주세요.");
         if (!region) return alert("지역을 선택해주세요.");
-
         const newM = { id: Date.now(), lat: window.tempLatLng.lat, lng: window.tempLatLng.lng, type: types[num].name, note: note, region: region };
-        
         showLoading(true);
         try {
-            // 구글 전송
             await fetch(`${SCRIPT_URL}?action=add`, { method: "POST", body: JSON.stringify(newM) });
             savedMarkers.push(newM);
             localStorage.setItem('ds_markers_v2', JSON.stringify(savedMarkers));
@@ -280,23 +295,32 @@
         if (visibleTypes[data.type]) clusters.addLayer(marker);
     }
 
+    // 지역 탐사도 계산 (상자+퍼즐 통합 버전)
     function updateRegionProgress() {
         const listEl = document.getElementById('regionProgressList');
         listEl.innerHTML = "";
         Object.keys(regionGoals).forEach(rName => {
             const goal = regionGoals[rName];
-            const current = { "상자": 0, "퍼즐": 0 };
+            const current = { "상자": 0, "퍼즐": 0, "미니게임": 0 };
             savedMarkers.forEach(m => {
                 if (m.region === rName && current[m.type] !== undefined) current[m.type]++;
             });
-            const boxCount = Math.min(current["상자"], goal["상자"]);
-            const puzzleCount = Math.min(current["퍼즐"], goal["퍼즐"]);
-            const percent = Math.floor(((boxCount + puzzleCount) / (goal["상자"] + goal["퍼즐"])) * 100);
+
+            // 계산: 1번(상자) + 2번(퍼즐) 합산하여 '상자' 목표량과 비교
+            const currentBoxSum = current["상자"] + current["퍼즐"];
+            const currentMiniSum = current["미니게임"];
+            
+            const boxCountForProg = Math.min(currentBoxSum, goal["상자"]);
+            const miniCountForProg = Math.min(currentMiniSum, goal["미니게임"]);
+            
+            const totalGoal = goal["상자"] + goal["미니게임"];
+            const percent = Math.floor(((boxCountForProg + miniCountForProg) / totalGoal) * 100);
+            
             listEl.innerHTML += `
                 <div class="region-card">
                     <div class="region-name"><span>${rName}</span><span>${percent}%</span></div>
                     <div class="prog-bar-bg"><div class="prog-bar-fill" style="width:${percent}%"></div></div>
-                    <div class="prog-text">상자 ${current["상자"]}/${goal["상자"]} | 퍼즐 ${current["퍼즐"]}/${goal["퍼즐"]}</div>
+                    <div class="prog-text">상자+퍼즐 ${currentBoxSum}/${goal["상자"]} | 미니게임 ${currentMiniSum}/${goal["미니게임"]}</div>
                 </div>`;
         });
     }
@@ -326,20 +350,17 @@
     };
 
     function showLoading(show) { document.getElementById('loadingOverlay').style.display = show ? 'flex' : 'none'; }
-
     function exportToJsFile() {
         const blob = new Blob(["const data = " + JSON.stringify(savedMarkers, null, 2) + ";"], {type: "text/javascript"});
         const dl = document.createElement('a'); dl.href = URL.createObjectURL(blob); dl.download = "data.js"; dl.click();
     }
-
     function importFromFile(input) {
         const reader = new FileReader();
         reader.onload = async e => {
             let content = e.target.result;
             if(content.includes("const data =")) content = content.replace("const data =", "").replace(/;$/, "");
             const imported = JSON.parse(content);
-            if(confirm("기존 클라우드 데이터를 무시하고 덮어씌울까요?")) {
-                // 이 부분은 전체 데이터를 구글 시트에 다시 쓰는 로직이 필요하나, 일단 로컬 우선 갱신
+            if(confirm("데이터를 덮어씌울까요?")) {
                 savedMarkers = imported;
                 localStorage.setItem('ds_markers_v2', JSON.stringify(savedMarkers));
                 location.reload();
@@ -347,20 +368,15 @@
         };
         reader.readAsText(input.files[0]);
     }
-
     function clearAllMarkers() { 
-        if(confirm("모든 마커를 삭제할까요? (클라우드 데이터도 포함)")){ 
-            // 클라우드 전체 삭제 로직은 구글 스크립트 action으로 추가 가능
+        if(confirm("모든 마커를 삭제할까요?")){ 
             clusters.clearLayers(); 
             savedMarkers = []; 
             localStorage.setItem('ds_markers_v2', JSON.stringify(savedMarkers)); 
             updateRegionProgress(); 
         } 
     }
-
     map.on('click', () => { closeModal(); if (document.getElementById('sideNav').classList.contains('open')) toggleNav(); });
-
-    // 시작하자마자 클라우드에서 가져오기
     syncFromCloud();
 </script>
 </body>
